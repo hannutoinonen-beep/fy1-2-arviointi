@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Density of Salt</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    font-family: "Segoe UI", system-ui, sans-serif; background: #f3f4f6; color: #1f2937;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+    padding: 12px 20px; background: #fff; border-bottom: 1px solid #d1d5db;
+  }
+  h1 { margin: 0; font-size: 1.25rem; }
+  .score { font-size: 1.1rem; font-weight: 600; }
+  button {
+    font: inherit; cursor: pointer; padding: 7px 14px;
+    border: 1px solid #9ca3af; border-radius: 6px; background: #fff; color: inherit;
+  }
+  button:hover { background: #f3f4f6; }
+  button.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  button.primary:hover { background: #4338ca; }
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 20px; }
+  .column {
+    min-height: 0; overflow-y: auto; background: #fff;
+    border: 1px solid #d1d5db; border-radius: 8px; padding: 0 18px 18px;
+  }
+  .column-head {
+    position: sticky; top: 0; z-index: 1; background: #fff; padding: 14px 0 10px;
+    display: flex; gap: 10px; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #e5e7eb; margin-bottom: 8px;
+  }
+  h2 { margin: 0; font-size: 1.05rem; }
+  fieldset { border: 0; padding: 0; margin: 0 0 16px; }
+  .section-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin: 12px 0 6px; }
+  h3 { margin: 0; font-size: 1rem; }
+  .section-head button { font-size: .8rem; padding: 3px 9px; white-space: nowrap; }
+  label { display: flex; gap: 10px; align-items: flex-start; padding: 5px 6px; border-radius: 4px; cursor: pointer; }
+  label:hover { background: #eef2ff; }
+  label input { margin: 3px 0 0; width: 16px; height: 16px; flex: none; }
+  .item-row { display: flex; gap: 8px; align-items: flex-start; }
+  .item-row label { flex: 1; }
+  .item-actions { display: flex; flex: none; gap: 4px; margin-top: 3px; }
+  .icon-button {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; padding: 0; line-height: 1; font-size: 1.1rem;
+  }
+  .icon-button svg, .legend svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .icon-button[aria-pressed="true"], .icon-button[aria-pressed="true"]:hover { background: #1f2937; border-color: #1f2937; color: #fff; }
+  .item-row.hidden-text label span { color: #6b7280; font-style: italic; }
+  .item-row.excluded label span { color: #6b7280; text-decoration: line-through; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 4px; font-size: .85rem; color: #4b5563; }
+  .legend span { display: inline-flex; gap: 6px; align-items: center; }
+  .comment-toggle.has-comment, .comment-toggle.has-comment:hover { background: #1f2937; border-color: #1f2937; color: #fff; }
+  .comment {
+    display: block; width: calc(100% - 32px); margin: 2px 0 8px 32px; padding: 6px 8px;
+    font: inherit; color: inherit; border: 1px solid #9ca3af; border-radius: 6px;
+  }
+  .comment[hidden] { display: none; }
+  #output { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+  @media (max-width: 800px) {
+    body { height: auto; }
+    main { grid-template-columns: 1fr; }
+    .column { overflow: visible; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Density of Salt</h1>
+  <div class="score" id="score" aria-live="polite"></div>
+  <button type="button" id="reset">Start over</button>
+</header>
+
+<main>
+  <section class="column">
+    <div class="column-head"><h2>Assessment criteria</h2></div>
+    <p class="legend">
+      <span><b>+</b> add a comment</span>
+      <span id="legend-hide">hide from feedback, still scored</span>
+      <span id="legend-exclude">hide from feedback and score</span>
+    </p>
+    <form id="checklist"></form>
+  </section>
+  <section class="column">
+    <div class="column-head">
+      <h2>Student feedback</h2>
+      <button type="button" class="primary" id="copy">Copy text</button>
+    </div>
+    <div id="output"></div>
+  </section>
+</main>
+
+<script>
+const MAX_POINTS = 10;
+
+// Each item: [positive statement, area to improve (negation)]
+const SECTIONS = [
+  { title: "1. Data Collection", items: [
+    ["A complete set of volume and mass measurements has been recorded.", "A complete set of volume and mass measurements has not been recorded."],
+    ["Measurements were collected over an appropriate range of volumes.", "Measurements were not collected over an appropriate range of volumes."],
+    ["Sufficient measurements were collected for reliable analysis.", "Not enough measurements were collected for reliable analysis."],
+    ["The recorded measurements are reasonable and consistent.", "The recorded measurements are not reasonable and consistent."],
+    ["The data table has been completed correctly.", "The data table has not been completed correctly."],
+    ["Numerical values are recorded without units in the data table.", "Numerical values are not recorded without units in the data table."],
+    ["All recorded values are presented to a consistent precision.", "The recorded values are not all presented to a consistent precision."],
+    ["The precision used is appropriate for the measuring instruments.", "The precision used is not appropriate for the measuring instruments."],
+    ["Table headings include quantity names and units.", "Table headings do not include both quantity names and units."],
+    ["The table contains multiple measurement pairs.", "The table does not contain multiple measurement pairs."],
+    ["Data are presented clearly and consistently.", "Data are not presented clearly and consistently."]
+  ]},
+  { title: "2. Graph", items: [
+    ["A graph of mass against volume has been produced.", "A graph of mass against volume has not been produced."],
+    ["Volume (mL) is plotted on the x-axis.", "Volume (mL) is not plotted on the x-axis."],
+    ["Mass (g) is plotted on the y-axis.", "Mass (g) is not plotted on the y-axis."],
+    ["Both axes are labelled correctly.", "The axes are not both labelled correctly."],
+    ["Appropriate units are shown on both axes.", "Appropriate units are not shown on both axes."],
+    ["Suitable axis scales have been chosen.", "Suitable axis scales have not been chosen."],
+    ["All data points are displayed on the graph.", "Not all data points are displayed on the graph."],
+    ["A linear best-fit line has been added.", "A linear best-fit line has not been added."],
+    ["The graph is clear and easy to read.", "The graph is not clear and easy to read."],
+    ["The graph is consistent with the recorded data.", "The graph is not consistent with the recorded data."]
+  ]},
+  { title: "3. Gradient and Density", items: [
+    ["The gradient of the best-fit line has been identified correctly.", "The gradient of the best-fit line has not been identified correctly."],
+    ["The unit of the gradient has been stated correctly.", "The unit of the gradient has not been stated correctly."],
+    ["The density of the salt has been determined from the gradient.", "The density of the salt has not been determined from the gradient."],
+    ["The density value has been reported with appropriate precision.", "The density value has not been reported with appropriate precision."],
+    ["The density calculation is correct.", "The density calculation is not correct."]
+  ]},
+  { title: "4. Question 3: Comparison with Accepted Value", items: [
+    ["An accepted density value for sodium chloride has been used.", "An accepted density value for sodium chloride has not been used."],
+    ["The percentage difference has been calculated correctly.", "The percentage difference has not been calculated correctly."],
+    ["The percentage difference calculation is clearly shown.", "The percentage difference calculation is not clearly shown."],
+    ["The measured density is compared with the accepted value.", "The measured density is not compared with the accepted value."],
+    ["The comparison is interpreted appropriately.", "The comparison is not interpreted appropriately."]
+  ]},
+  { title: "6. Question 5: Direct Proportionality", items: [
+    ["The relationship between mass and volume is described correctly.", "The relationship between mass and volume is not described correctly."],
+    ["Evidence from the graph is used to support the conclusion.", "Evidence from the graph is not used to support the conclusion."],
+    ["The concept of direct proportionality is applied correctly.", "The concept of direct proportionality is not applied correctly."],
+    ["The response is consistent with the line of best fit.", "The response is not consistent with the line of best fit."],
+    ["The explanation is scientifically justified.", "The explanation is not scientifically justified."]
+  ]},
+  { title: "7. Overall Quality", items: [
+    ["Answers are complete and clearly explained.", "Answers are not complete and clearly explained."],
+    ["Scientific terminology is used correctly.", "Scientific terminology is not used correctly."],
+    ["Appropriate units are used throughout.", "Appropriate units are not used throughout."],
+    ["Calculations are organised and easy to follow.", "Calculations are not organised and easy to follow."],
+    ["Conclusions are supported by evidence from the data and graph.", "Conclusions are not supported by evidence from the data and graph."],
+    ["The work is presented neatly and clearly.", "The work is not presented neatly and clearly."]
+  ]}
+];
+
+const form = document.getElementById("checklist");
+const output = document.getElementById("output");
+const scoreEl = document.getElementById("score");
+const copyButton = document.getElementById("copy");
+
+function element(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+// Crossed-out eye: hidden from the text. Prohibition sign: not included at all.
+const ICONS = {
+  hide: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 21 20 3"/></svg>',
+  exclude: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>'
+};
+document.getElementById("legend-hide").insertAdjacentHTML("afterbegin", ICONS.hide);
+document.getElementById("legend-exclude").insertAdjacentHTML("afterbegin", ICONS.exclude);
+
+function modeButton(icon, title, itemText) {
+  const button = element("button", { type: "button", className: "icon-button", title });
+  button.innerHTML = icon;
+  button.setAttribute("aria-label", title + ": " + itemText);
+  return button;
+}
+
+// Build the checklist in the left column
+const sectionBoxes = SECTIONS.map(section => {
+  const toggle = element("button", { type: "button" });
+  const fieldset = element("fieldset", {},
+    element("div", { className: "section-head" }, element("h3", { textContent: section.title }), toggle));
+
+  const comments = [];
+  const commentButtons = [];
+  const modes = []; // "normal", "hidden" or "excluded"
+  const setModes = [];
+  const boxes = section.items.map(([text], i) => {
+    const box = element("input", { type: "checkbox", autocomplete: "off" });
+    const commentButton = element("button", {
+      type: "button", className: "icon-button comment-toggle", textContent: "+", title: "Add a comment"
+    });
+    commentButton.setAttribute("aria-label", "Add a comment: " + text);
+    commentButton.setAttribute("aria-expanded", "false");
+    const comment = element("input", {
+      type: "text", className: "comment", placeholder: "Write an additional comment", autocomplete: "off", hidden: true
+    });
+    comment.setAttribute("aria-label", "Comment: " + text);
+
+    // Closing the field keeps the comment. A dark button means the item has a comment.
+    commentButton.addEventListener("click", () => {
+      comment.hidden = !comment.hidden;
+      commentButton.setAttribute("aria-expanded", String(!comment.hidden));
+      if (!comment.hidden) comment.focus();
+    });
+
+    const hideButton = modeButton(ICONS.hide, "Hide from feedback, still scored", text);
+    const excludeButton = modeButton(ICONS.exclude, "Hide from feedback and score", text);
+    const row = element("div", { className: "item-row" },
+      element("label", {}, box, element("span", { textContent: text })),
+      element("div", { className: "item-actions" }, commentButton, hideButton, excludeButton));
+
+    // The two modes are mutually exclusive
+    setModes[i] = mode => {
+      modes[i] = mode;
+      hideButton.setAttribute("aria-pressed", String(mode === "hidden"));
+      excludeButton.setAttribute("aria-pressed", String(mode === "excluded"));
+      row.classList.toggle("hidden-text", mode === "hidden");
+      row.classList.toggle("excluded", mode === "excluded");
+    };
+    setModes[i]("normal");
+    for (const [button, mode] of [[hideButton, "hidden"], [excludeButton, "excluded"]]) {
+      button.addEventListener("click", () => {
+        setModes[i](modes[i] === mode ? "normal" : mode);
+        update();
+      });
+    }
+
+    comments[i] = comment;
+    commentButtons[i] = commentButton;
+    fieldset.append(row, comment);
+    return box;
+  });
+
+  toggle.addEventListener("click", () => {
+    const check = !boxes.every(b => b.checked);
+    boxes.forEach(b => b.checked = check);
+    update();
+  });
+
+  form.append(fieldset);
+  return { boxes, comments, commentButtons, modes, setModes, toggle };
+});
+
+function update() {
+  let selected = 0;
+  let total = 0;
+  let excluded = 0;
+  const parts = [];
+
+  SECTIONS.forEach((section, s) => {
+    const { boxes, comments, commentButtons, modes, toggle } = sectionBoxes[s];
+    const good = [];
+    const improve = [];
+
+    section.items.forEach(([positive, negative], i) => {
+      const comment = comments[i].value.trim();
+      const suffix = comment ? " – " + comment : "";
+      commentButtons[i].classList.toggle("has-comment", comment !== "");
+      if (modes[i] === "excluded") {
+        excluded++;
+        return;
+      }
+      total++;
+      if (boxes[i].checked) selected++;
+      if (modes[i] === "hidden") return;
+      if (boxes[i].checked) good.push("+ " + positive + suffix);
+      else improve.push("− " + negative + suffix);
+    });
+
+    toggle.textContent = boxes.every(b => b.checked) ? "Clear section" : "Select all";
+
+    // Skip a section that has nothing to show
+    if (!good.length && !improve.length) return;
+
+    const lines = [section.title.toUpperCase()];
+    if (good.length) lines.push("Strengths:", ...good);
+    if (good.length && improve.length) lines.push("");
+    if (improve.length) lines.push("Areas to improve:", ...improve);
+    parts.push(lines.join("\n"));
+  });
+
+  // Multiply before dividing, then round down
+  const points = total ? Math.floor(selected * MAX_POINTS / total) : 0;
+  const scoreText = `Points: ${points} / ${MAX_POINTS}`;
+
+  const excludedText = excluded ? `, ${excluded} not scored` : "";
+  scoreEl.textContent = `${scoreText} (${selected} / ${total} items selected${excludedText})`;
+  output.textContent = [scoreText, ...parts].join("\n\n");
+}
+
+// Fallback for browsers without the clipboard API
+function copyFallback(text) {
+  const area = element("textarea", { value: text });
+  document.body.append(area);
+  area.select();
+  const ok = document.execCommand("copy");
+  area.remove();
+  return ok;
+}
+
+let copyTimer;
+copyButton.addEventListener("click", async () => {
+  const text = output.textContent;
+  let ok;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    ok = copyFallback(text);
+  }
+  copyButton.textContent = ok ? "Copied" : "Copying failed";
+  clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => copyButton.textContent = "Copy text", 2000);
+});
+
+form.addEventListener("change", update);
+form.addEventListener("input", update);
+// Enter must not submit the form: a reload would clear the assessment
+form.addEventListener("submit", event => event.preventDefault());
+form.addEventListener("keydown", event => {
+  if (event.key === "Enter" && event.target.matches(".comment")) event.preventDefault();
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  const anyData = sectionBoxes.some(s => s.boxes.some(b => b.checked) || s.comments.some(c => c.value.trim()) ||
+    s.modes.some(m => m !== "normal"));
+  if (anyData && !confirm("Clear all selections, comments and hidden items?")) return;
+  form.reset();
+  sectionBoxes.forEach(s => {
+    s.comments.forEach(c => c.hidden = true);
+    s.setModes.forEach(setMode => setMode("normal"));
+    s.commentButtons.forEach(b => b.setAttribute("aria-expanded", "false"));
+  });
+  update();
+  document.querySelectorAll(".column").forEach(c => c.scrollTop = 0);
+  window.scrollTo(0, 0);
+});
+
+update();
+</script>
+</body>
+</html>
