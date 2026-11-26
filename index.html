@@ -41,6 +41,17 @@
   label { display: flex; gap: 10px; align-items: flex-start; padding: 5px 6px; border-radius: 4px; cursor: pointer; }
   label:hover { background: #eef2ff; }
   label input { margin: 3px 0 0; width: 16px; height: 16px; flex: none; }
+  .item-row { display: flex; gap: 8px; align-items: flex-start; }
+  .item-row label { flex: 1; }
+  .comment-toggle {
+    flex: none; width: 26px; height: 26px; padding: 0; margin-top: 3px; line-height: 1; font-size: 1.1rem;
+  }
+  .comment-toggle.has-comment, .comment-toggle.has-comment:hover { background: #1f2937; border-color: #1f2937; color: #fff; }
+  .comment {
+    display: block; width: calc(100% - 32px); margin: 2px 0 8px 32px; padding: 6px 8px;
+    font: inherit; color: inherit; border: 1px solid #9ca3af; border-radius: 6px;
+  }
+  .comment[hidden] { display: none; }
   #output { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
   @media (max-width: 800px) {
     body { height: auto; }
@@ -169,9 +180,34 @@ const sectionBoxes = SECTIONS.map(section => {
   const fieldset = element("fieldset", {},
     element("div", { className: "section-head" }, element("h3", { textContent: section.title }), toggle));
 
-  const boxes = section.items.map(([text]) => {
+  const comments = [];
+  const commentButtons = [];
+  const boxes = section.items.map(([text], i) => {
     const box = element("input", { type: "checkbox", autocomplete: "off" });
-    fieldset.append(element("label", {}, box, element("span", { textContent: text })));
+    const commentButton = element("button", {
+      type: "button", className: "comment-toggle", textContent: "+", title: "Lisää kommentti"
+    });
+    commentButton.setAttribute("aria-label", "Lisää kommentti: " + text);
+    commentButton.setAttribute("aria-expanded", "false");
+    const comment = element("input", {
+      type: "text", className: "comment", placeholder: "Kirjoita lisäkommentti", autocomplete: "off", hidden: true
+    });
+    comment.setAttribute("aria-label", "Kommentti: " + text);
+
+    // Kentän sulkeminen ei poista kommenttia. Tumma nappi kertoo, että kohdalla on kommentti.
+    commentButton.addEventListener("click", () => {
+      comment.hidden = !comment.hidden;
+      commentButton.setAttribute("aria-expanded", String(!comment.hidden));
+      if (!comment.hidden) comment.focus();
+    });
+
+    comments[i] = comment;
+    commentButtons[i] = commentButton;
+    fieldset.append(
+      element("div", { className: "item-row" },
+        element("label", {}, box, element("span", { textContent: text })),
+        commentButton),
+      comment);
     return box;
   });
 
@@ -182,7 +218,7 @@ const sectionBoxes = SECTIONS.map(section => {
   });
 
   form.append(fieldset);
-  return { boxes, toggle };
+  return { boxes, comments, commentButtons, toggle };
 });
 
 function update() {
@@ -191,9 +227,17 @@ function update() {
   const parts = [];
 
   SECTIONS.forEach((section, s) => {
-    const { boxes, toggle } = sectionBoxes[s];
-    const good = section.items.filter((_, i) => boxes[i].checked).map(item => "+ " + item[0]);
-    const improve = section.items.filter((_, i) => !boxes[i].checked).map(item => "− " + item[1]);
+    const { boxes, comments, commentButtons, toggle } = sectionBoxes[s];
+    const good = [];
+    const improve = [];
+
+    section.items.forEach(([positive, negative], i) => {
+      const comment = comments[i].value.trim();
+      const suffix = comment ? " – " + comment : "";
+      commentButtons[i].classList.toggle("has-comment", comment !== "");
+      if (boxes[i].checked) good.push("+ " + positive + suffix);
+      else improve.push("− " + negative + suffix);
+    });
 
     selected += good.length;
     total += section.items.length;
@@ -240,11 +284,21 @@ copyButton.addEventListener("click", async () => {
 });
 
 form.addEventListener("change", update);
+form.addEventListener("input", update);
+// Enter ei saa lähettää lomaketta, koska sivun uudelleenlataus tyhjentäisi arvioinnin
+form.addEventListener("submit", event => event.preventDefault());
+form.addEventListener("keydown", event => {
+  if (event.key === "Enter" && event.target.matches(".comment")) event.preventDefault();
+});
 
 document.getElementById("reset").addEventListener("click", () => {
-  const anyChecked = sectionBoxes.some(s => s.boxes.some(b => b.checked));
-  if (anyChecked && !confirm("Tyhjennetäänkö kaikki valinnat?")) return;
+  const anyData = sectionBoxes.some(s => s.boxes.some(b => b.checked) || s.comments.some(c => c.value.trim()));
+  if (anyData && !confirm("Tyhjennetäänkö kaikki valinnat ja kommentit?")) return;
   form.reset();
+  sectionBoxes.forEach(s => {
+    s.comments.forEach(c => c.hidden = true);
+    s.commentButtons.forEach(b => b.setAttribute("aria-expanded", "false"));
+  });
   update();
   document.querySelectorAll(".column").forEach(c => c.scrollTop = 0);
   window.scrollTo(0, 0);
