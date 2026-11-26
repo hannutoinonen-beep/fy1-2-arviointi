@@ -43,9 +43,17 @@
   label input { margin: 3px 0 0; width: 16px; height: 16px; flex: none; }
   .item-row { display: flex; gap: 8px; align-items: flex-start; }
   .item-row label { flex: 1; }
-  .comment-toggle {
-    flex: none; width: 26px; height: 26px; padding: 0; margin-top: 3px; line-height: 1; font-size: 1.1rem;
+  .item-actions { display: flex; flex: none; gap: 4px; margin-top: 3px; }
+  .icon-button {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; padding: 0; line-height: 1; font-size: 1.1rem;
   }
+  .icon-button svg, .legend svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .icon-button[aria-pressed="true"], .icon-button[aria-pressed="true"]:hover { background: #1f2937; border-color: #1f2937; color: #fff; }
+  .item-row.hidden-text label span { color: #6b7280; font-style: italic; }
+  .item-row.excluded label span { color: #6b7280; text-decoration: line-through; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 4px; font-size: .85rem; color: #4b5563; }
+  .legend span { display: inline-flex; gap: 6px; align-items: center; }
   .comment-toggle.has-comment, .comment-toggle.has-comment:hover { background: #1f2937; border-color: #1f2937; color: #fff; }
   .comment {
     display: block; width: calc(100% - 32px); margin: 2px 0 8px 32px; padding: 6px 8px;
@@ -70,6 +78,11 @@
 <main>
   <section class="column">
     <div class="column-head"><h2>Arviointikriteerit</h2></div>
+    <p class="legend">
+      <span><b>+</b> lisää kommentti</span>
+      <span id="legend-hide">piilota palautteesta, mukana pisteissä</span>
+      <span id="legend-exclude">piilota palautteesta ja pisteistä</span>
+    </p>
     <form id="checklist"></form>
   </section>
   <section class="column">
@@ -174,6 +187,21 @@ function element(tag, props = {}, ...children) {
   return node;
 }
 
+// Yliviivattu silmä: piilotettu tekstistä. Kieltomerkki: ei mukana lainkaan.
+const ICONS = {
+  hide: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 21 20 3"/></svg>',
+  exclude: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>'
+};
+document.getElementById("legend-hide").insertAdjacentHTML("afterbegin", ICONS.hide);
+document.getElementById("legend-exclude").insertAdjacentHTML("afterbegin", ICONS.exclude);
+
+function modeButton(icon, title, itemText) {
+  const button = element("button", { type: "button", className: "icon-button", title });
+  button.innerHTML = icon;
+  button.setAttribute("aria-label", title + ": " + itemText);
+  return button;
+}
+
 // Rakennetaan vasemman palstan checkbox-lista
 const sectionBoxes = SECTIONS.map(section => {
   const toggle = element("button", { type: "button" });
@@ -182,10 +210,12 @@ const sectionBoxes = SECTIONS.map(section => {
 
   const comments = [];
   const commentButtons = [];
+  const modes = []; // "normal", "hidden" tai "excluded"
+  const setModes = [];
   const boxes = section.items.map(([text], i) => {
     const box = element("input", { type: "checkbox", autocomplete: "off" });
     const commentButton = element("button", {
-      type: "button", className: "comment-toggle", textContent: "+", title: "Lisää kommentti"
+      type: "button", className: "icon-button comment-toggle", textContent: "+", title: "Lisää kommentti"
     });
     commentButton.setAttribute("aria-label", "Lisää kommentti: " + text);
     commentButton.setAttribute("aria-expanded", "false");
@@ -201,13 +231,31 @@ const sectionBoxes = SECTIONS.map(section => {
       if (!comment.hidden) comment.focus();
     });
 
+    const hideButton = modeButton(ICONS.hide, "Piilota palautteesta, mukana pisteissä", text);
+    const excludeButton = modeButton(ICONS.exclude, "Piilota palautteesta ja pisteistä", text);
+    const row = element("div", { className: "item-row" },
+      element("label", {}, box, element("span", { textContent: text })),
+      element("div", { className: "item-actions" }, commentButton, hideButton, excludeButton));
+
+    // Tilat sulkevat toisensa pois
+    setModes[i] = mode => {
+      modes[i] = mode;
+      hideButton.setAttribute("aria-pressed", String(mode === "hidden"));
+      excludeButton.setAttribute("aria-pressed", String(mode === "excluded"));
+      row.classList.toggle("hidden-text", mode === "hidden");
+      row.classList.toggle("excluded", mode === "excluded");
+    };
+    setModes[i]("normal");
+    for (const [button, mode] of [[hideButton, "hidden"], [excludeButton, "excluded"]]) {
+      button.addEventListener("click", () => {
+        setModes[i](modes[i] === mode ? "normal" : mode);
+        update();
+      });
+    }
+
     comments[i] = comment;
     commentButtons[i] = commentButton;
-    fieldset.append(
-      element("div", { className: "item-row" },
-        element("label", {}, box, element("span", { textContent: text })),
-        commentButton),
-      comment);
+    fieldset.append(row, comment);
     return box;
   });
 
@@ -218,16 +266,17 @@ const sectionBoxes = SECTIONS.map(section => {
   });
 
   form.append(fieldset);
-  return { boxes, comments, commentButtons, toggle };
+  return { boxes, comments, commentButtons, modes, setModes, toggle };
 });
 
 function update() {
   let selected = 0;
   let total = 0;
+  let excluded = 0;
   const parts = [];
 
   SECTIONS.forEach((section, s) => {
-    const { boxes, comments, commentButtons, toggle } = sectionBoxes[s];
+    const { boxes, comments, commentButtons, modes, toggle } = sectionBoxes[s];
     const good = [];
     const improve = [];
 
@@ -235,13 +284,21 @@ function update() {
       const comment = comments[i].value.trim();
       const suffix = comment ? " – " + comment : "";
       commentButtons[i].classList.toggle("has-comment", comment !== "");
+      if (modes[i] === "excluded") {
+        excluded++;
+        return;
+      }
+      total++;
+      if (boxes[i].checked) selected++;
+      if (modes[i] === "hidden") return;
       if (boxes[i].checked) good.push("+ " + positive + suffix);
       else improve.push("− " + negative + suffix);
     });
 
-    selected += good.length;
-    total += section.items.length;
-    toggle.textContent = improve.length ? "Valitse kaikki" : "Poista valinnat";
+    toggle.textContent = boxes.every(b => b.checked) ? "Poista valinnat" : "Valitse kaikki";
+
+    // Osa jää pois palautteesta, jos siinä ei ole yhtään näytettävää kohtaa
+    if (!good.length && !improve.length) return;
 
     const lines = [section.title.toUpperCase()];
     if (good.length) lines.push("Onnistumiset:", ...good);
@@ -251,11 +308,12 @@ function update() {
   });
 
   // Kokonaislukulaskenta ennen jakoa, pyöristys alaspäin
-  const points = Math.floor(selected * MAX_POINTS / total);
+  const points = total ? Math.floor(selected * MAX_POINTS / total) : 0;
   const scoreText = `Pisteet: ${points} / ${MAX_POINTS}`;
 
-  scoreEl.textContent = `${scoreText} (valittu ${selected} / ${total} kohtaa)`;
-  output.textContent = `${scoreText}\n\n${parts.join("\n\n")}`;
+  const excludedText = excluded ? `, ${excluded} ei mukana pisteissä` : "";
+  scoreEl.textContent = `${scoreText} (valittu ${selected} / ${total} kohtaa${excludedText})`;
+  output.textContent = [scoreText, ...parts].join("\n\n");
 }
 
 // Varakeino selaimille, joissa leikepöytärajapinta ei ole käytettävissä
@@ -292,11 +350,13 @@ form.addEventListener("keydown", event => {
 });
 
 document.getElementById("reset").addEventListener("click", () => {
-  const anyData = sectionBoxes.some(s => s.boxes.some(b => b.checked) || s.comments.some(c => c.value.trim()));
-  if (anyData && !confirm("Tyhjennetäänkö kaikki valinnat ja kommentit?")) return;
+  const anyData = sectionBoxes.some(s => s.boxes.some(b => b.checked) || s.comments.some(c => c.value.trim()) ||
+    s.modes.some(m => m !== "normal"));
+  if (anyData && !confirm("Tyhjennetäänkö kaikki valinnat, kommentit ja piilotukset?")) return;
   form.reset();
   sectionBoxes.forEach(s => {
     s.comments.forEach(c => c.hidden = true);
+    s.setModes.forEach(setMode => setMode("normal"));
     s.commentButtons.forEach(b => b.setAttribute("aria-expanded", "false"));
   });
   update();
