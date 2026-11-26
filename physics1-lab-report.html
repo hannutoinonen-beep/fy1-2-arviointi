@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Physics 1 Lab Report</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    font-family: "Segoe UI", system-ui, sans-serif; background: #f3f4f6; color: #1f2937;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+    padding: 12px 20px; background: #fff; border-bottom: 1px solid #d1d5db;
+  }
+  h1 { margin: 0; font-size: 1.25rem; }
+  .score { font-size: 1.1rem; font-weight: 600; }
+  button {
+    font: inherit; cursor: pointer; padding: 7px 14px;
+    border: 1px solid #9ca3af; border-radius: 6px; background: #fff; color: inherit;
+  }
+  button:hover { background: #f3f4f6; }
+  button.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  button.primary:hover { background: #4338ca; }
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 20px; }
+  .column {
+    min-height: 0; overflow-y: auto; background: #fff;
+    border: 1px solid #d1d5db; border-radius: 8px; padding: 0 18px 18px;
+  }
+  .column-head {
+    position: sticky; top: 0; z-index: 1; background: #fff; padding: 14px 0 10px;
+    display: flex; gap: 10px; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #e5e7eb; margin-bottom: 8px;
+  }
+  h2 { margin: 0; font-size: 1.05rem; }
+  fieldset { border: 0; padding: 0; margin: 0 0 16px; }
+  .section-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin: 12px 0 6px; }
+  h3 { margin: 0; font-size: 1rem; }
+  .section-head button { font-size: .8rem; padding: 3px 9px; white-space: nowrap; }
+  label { display: flex; gap: 10px; align-items: flex-start; padding: 5px 6px; border-radius: 4px; cursor: pointer; }
+  label:hover { background: #eef2ff; }
+  label input { margin: 3px 0 0; width: 16px; height: 16px; flex: none; }
+  .item-row { display: flex; gap: 8px; align-items: flex-start; }
+  .item-row label { flex: 1; }
+  .item-actions { display: flex; flex: none; gap: 4px; margin-top: 3px; }
+  .icon-button {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; padding: 0; line-height: 1; font-size: 1.1rem;
+  }
+  .icon-button svg, .legend svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .icon-button[aria-pressed="true"], .icon-button[aria-pressed="true"]:hover { background: #1f2937; border-color: #1f2937; color: #fff; }
+  .item-row.hidden-text label span { color: #6b7280; font-style: italic; }
+  .item-row.excluded label span { color: #6b7280; text-decoration: line-through; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 4px; font-size: .85rem; color: #4b5563; }
+  .legend span { display: inline-flex; gap: 6px; align-items: center; }
+  .comment-toggle.has-comment, .comment-toggle.has-comment:hover { background: #1f2937; border-color: #1f2937; color: #fff; }
+  .comment {
+    display: block; width: calc(100% - 32px); margin: 2px 0 8px 32px; padding: 6px 8px;
+    font: inherit; color: inherit; border: 1px solid #9ca3af; border-radius: 6px;
+  }
+  .comment[hidden] { display: none; }
+  #output { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+  @media (max-width: 800px) {
+    body { height: auto; }
+    main { grid-template-columns: 1fr; }
+    .column { overflow: visible; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Physics 1 Lab Report</h1>
+  <div class="score" id="score" aria-live="polite"></div>
+  <button type="button" id="reset">Start over</button>
+</header>
+
+<main>
+  <section class="column">
+    <div class="column-head"><h2>Assessment criteria</h2></div>
+    <p class="legend">
+      <span><b>+</b> add a comment</span>
+      <span id="legend-hide">hide from feedback, still scored</span>
+      <span id="legend-exclude">hide from feedback and score</span>
+    </p>
+    <form id="checklist"></form>
+  </section>
+  <section class="column">
+    <div class="column-head">
+      <h2>Student feedback</h2>
+      <button type="button" class="primary" id="copy">Copy text</button>
+    </div>
+    <div id="output"></div>
+  </section>
+</main>
+
+<script>
+const MAX_POINTS = 10;
+
+// Each item: [positive statement, area to improve (negation)]
+const SECTIONS = [
+  { title: "1. Title and Research Question", items: [
+    ["Your name is included in the report.", "Your name is not included in the report."],
+    ["The title describes the experiment.", "The title does not describe the experiment."],
+    ["The title is not written as a question.", "The title is written as a question."],
+    ["A research question is given.", "A research question is not given."],
+    ["The research question follows a recommended format (for example, \"How does y depend on x?\").", "The research question does not follow a recommended format (for example, \"How does y depend on x?\")."],
+    ["The research question names the independent variable.", "The research question does not name the independent variable."],
+    ["The research question names the dependent variable.", "The research question does not name the dependent variable."]
+  ]},
+  { title: "2. Variables", items: [
+    ["The variables are presented in a table.", "The variables are not presented in a table."],
+    ["The independent variable (the one you deliberately change) is identified correctly.", "The independent variable (the one you deliberately change) is not identified correctly."],
+    ["The dependent variable (the outcome you measure) is identified correctly.", "The dependent variable (the outcome you measure) is not identified correctly."],
+    ["The relevant controlled variables are identified.", "The relevant controlled variables are not all identified."],
+    ["Controlled variables are kept constant, or monitored and recorded if they cannot be kept constant.", "It is not shown that the controlled variables are kept constant, or monitored and recorded if they cannot be kept constant."]
+  ]},
+  { title: "3. Apparatus", items: [
+    ["The equipment used in the experiment is listed.", "The equipment used in the experiment is not listed."],
+    ["All the equipment needed for the experiment is included.", "Not all the equipment needed for the experiment is included."],
+    ["It is clear what each measuring device or app is used for.", "It is not clear what each measuring device or app is used for."]
+  ]},
+  { title: "4. Raw Data", items: [
+    ["The data table has a caption placed above it.", "The data table does not have a caption placed above it."],
+    ["The column headers include the quantity names.", "The column headers do not include all the quantity names."],
+    ["The column headers include the quantity symbols.", "The column headers do not include all the quantity symbols."],
+    ["The column headers include the units.", "The column headers do not include all the units."],
+    ["Values are recorded in the table without units.", "Values are not recorded in the table without units."],
+    ["All values within a column are given to the same precision.", "The values within a column are not all given to the same precision."],
+    ["Values are recorded to the precision of the measuring instrument or the measurement uncertainty.", "Values are not recorded to the precision of the measuring instrument or the measurement uncertainty."],
+    ["There are at least five data points.", "There are fewer than five data points."],
+    ["The independent variable covers a sufficiently wide range.", "The independent variable does not cover a sufficiently wide range."]
+  ]},
+  { title: "5. Scatter Plot", items: [
+    ["A scatter plot of the data has been made.", "A scatter plot of the data has not been made."],
+    ["The scatter plot has been made with Excel or Vernier Graphical Analysis.", "The scatter plot has not been made with Excel or Vernier Graphical Analysis."],
+    ["The independent variable is on the horizontal axis.", "The independent variable is not on the horizontal axis."],
+    ["The dependent variable is on the vertical axis.", "The dependent variable is not on the vertical axis."],
+    ["Both axis labels include the quantity name.", "The axis labels do not both include the quantity name."],
+    ["Both axis labels include the quantity symbol.", "The axis labels do not both include the quantity symbol."],
+    ["Both axis labels include the correct unit.", "The axis labels do not both include the correct unit."],
+    ["The quantities and units on the axes match those in the data table.", "The quantities and units on the axes do not all match those in the data table."],
+    ["The graph has a figure caption placed below it.", "The graph does not have a figure caption placed below it."]
+  ]}
+];
+
+const form = document.getElementById("checklist");
+const output = document.getElementById("output");
+const scoreEl = document.getElementById("score");
+const copyButton = document.getElementById("copy");
+
+function element(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+// Crossed-out eye: hidden from the text. Prohibition sign: not included at all.
+const ICONS = {
+  hide: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 21 20 3"/></svg>',
+  exclude: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>'
+};
+document.getElementById("legend-hide").insertAdjacentHTML("afterbegin", ICONS.hide);
+document.getElementById("legend-exclude").insertAdjacentHTML("afterbegin", ICONS.exclude);
+
+function modeButton(icon, title, itemText) {
+  const button = element("button", { type: "button", className: "icon-button", title });
+  button.innerHTML = icon;
+  button.setAttribute("aria-label", title + ": " + itemText);
+  return button;
+}
+
+// Build the checklist in the left column
+const sectionBoxes = SECTIONS.map(section => {
+  const toggle = element("button", { type: "button" });
+  const fieldset = element("fieldset", {},
+    element("div", { className: "section-head" }, element("h3", { textContent: section.title }), toggle));
+
+  const comments = [];
+  const commentButtons = [];
+  const modes = []; // "normal", "hidden" or "excluded"
+  const setModes = [];
+  const boxes = section.items.map(([text], i) => {
+    const box = element("input", { type: "checkbox", autocomplete: "off" });
+    const commentButton = element("button", {
+      type: "button", className: "icon-button comment-toggle", textContent: "+", title: "Add a comment"
+    });
+    commentButton.setAttribute("aria-label", "Add a comment: " + text);
+    commentButton.setAttribute("aria-expanded", "false");
+    const comment = element("input", {
+      type: "text", className: "comment", placeholder: "Write an additional comment", autocomplete: "off", hidden: true
+    });
+    comment.setAttribute("aria-label", "Comment: " + text);
+
+    // Closing the field keeps the comment. A dark button means the item has a comment.
+    commentButton.addEventListener("click", () => {
+      comment.hidden = !comment.hidden;
+      commentButton.setAttribute("aria-expanded", String(!comment.hidden));
+      if (!comment.hidden) comment.focus();
+    });
+
+    const hideButton = modeButton(ICONS.hide, "Hide from feedback, still scored", text);
+    const excludeButton = modeButton(ICONS.exclude, "Hide from feedback and score", text);
+    const row = element("div", { className: "item-row" },
+      element("label", {}, box, element("span", { textContent: text })),
+      element("div", { className: "item-actions" }, commentButton, hideButton, excludeButton));
+
+    // The two modes are mutually exclusive
+    setModes[i] = mode => {
+      modes[i] = mode;
+      hideButton.setAttribute("aria-pressed", String(mode === "hidden"));
+      excludeButton.setAttribute("aria-pressed", String(mode === "excluded"));
+      row.classList.toggle("hidden-text", mode === "hidden");
+      row.classList.toggle("excluded", mode === "excluded");
+    };
+    setModes[i]("normal");
+    for (const [button, mode] of [[hideButton, "hidden"], [excludeButton, "excluded"]]) {
+      button.addEventListener("click", () => {
+        setModes[i](modes[i] === mode ? "normal" : mode);
+        update();
+      });
+    }
+
+    comments[i] = comment;
+    commentButtons[i] = commentButton;
+    fieldset.append(row, comment);
+    return box;
+  });
+
+  toggle.addEventListener("click", () => {
+    const check = !boxes.every(b => b.checked);
+    boxes.forEach(b => b.checked = check);
+    update();
+  });
+
+  form.append(fieldset);
+  return { boxes, comments, commentButtons, modes, setModes, toggle };
+});
+
+function update() {
+  let selected = 0;
+  let total = 0;
+  let excluded = 0;
+  const parts = [];
+
+  SECTIONS.forEach((section, s) => {
+    const { boxes, comments, commentButtons, modes, toggle } = sectionBoxes[s];
+    const good = [];
+    const improve = [];
+
+    section.items.forEach(([positive, negative], i) => {
+      const comment = comments[i].value.trim();
+      const suffix = comment ? " – " + comment : "";
+      commentButtons[i].classList.toggle("has-comment", comment !== "");
+      if (modes[i] === "excluded") {
+        excluded++;
+        return;
+      }
+      total++;
+      if (boxes[i].checked) selected++;
+      if (modes[i] === "hidden") return;
+      if (boxes[i].checked) good.push("+ " + positive + suffix);
+      else improve.push("− " + negative + suffix);
+    });
+
+    toggle.textContent = boxes.every(b => b.checked) ? "Clear section" : "Select all";
+
+    // Skip a section that has nothing to show
+    if (!good.length && !improve.length) return;
+
+    const lines = [section.title.toUpperCase()];
+    if (good.length) lines.push("Strengths:", ...good);
+    if (good.length && improve.length) lines.push("");
+    if (improve.length) lines.push("Areas to improve:", ...improve);
+    parts.push(lines.join("\n"));
+  });
+
+  // Multiply before dividing, then round down
+  const points = total ? Math.floor(selected * MAX_POINTS / total) : 0;
+  const scoreText = `Points: ${points} / ${MAX_POINTS}`;
+
+  const excludedText = excluded ? `, ${excluded} not scored` : "";
+  scoreEl.textContent = `${scoreText} (${selected} / ${total} items selected${excludedText})`;
+  output.textContent = [scoreText, ...parts].join("\n\n");
+}
+
+// Fallback for browsers without the clipboard API
+function copyFallback(text) {
+  const area = element("textarea", { value: text });
+  document.body.append(area);
+  area.select();
+  const ok = document.execCommand("copy");
+  area.remove();
+  return ok;
+}
+
+let copyTimer;
+copyButton.addEventListener("click", async () => {
+  const text = output.textContent;
+  let ok;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    ok = copyFallback(text);
+  }
+  copyButton.textContent = ok ? "Copied" : "Copying failed";
+  clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => copyButton.textContent = "Copy text", 2000);
+});
+
+form.addEventListener("change", update);
+form.addEventListener("input", update);
+// Enter must not submit the form: a reload would clear the assessment
+form.addEventListener("submit", event => event.preventDefault());
+form.addEventListener("keydown", event => {
+  if (event.key === "Enter" && event.target.matches(".comment")) event.preventDefault();
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  const anyData = sectionBoxes.some(s => s.boxes.some(b => b.checked) || s.comments.some(c => c.value.trim()) ||
+    s.modes.some(m => m !== "normal"));
+  if (anyData && !confirm("Clear all selections, comments and hidden items?")) return;
+  form.reset();
+  sectionBoxes.forEach(s => {
+    s.comments.forEach(c => c.hidden = true);
+    s.setModes.forEach(setMode => setMode("normal"));
+    s.commentButtons.forEach(b => b.setAttribute("aria-expanded", "false"));
+  });
+  update();
+  document.querySelectorAll(".column").forEach(c => c.scrollTop = 0);
+  window.scrollTo(0, 0);
+});
+
+update();
+</script>
+</body>
+</html>
