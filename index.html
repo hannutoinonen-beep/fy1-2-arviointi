@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FY1-2 Oman kokeellisen työn arviointi</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    font-family: "Segoe UI", system-ui, sans-serif; background: #f3f4f6; color: #1f2937;
+  }
+  header {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+    padding: 12px 20px; background: #fff; border-bottom: 1px solid #d1d5db;
+  }
+  h1 { margin: 0; font-size: 1.25rem; }
+  .score { font-size: 1.1rem; font-weight: 600; }
+  button {
+    font: inherit; cursor: pointer; padding: 7px 14px;
+    border: 1px solid #9ca3af; border-radius: 6px; background: #fff; color: inherit;
+  }
+  button:hover { background: #f3f4f6; }
+  button.primary { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  button.primary:hover { background: #4338ca; }
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 20px; }
+  .column {
+    min-height: 0; overflow-y: auto; background: #fff;
+    border: 1px solid #d1d5db; border-radius: 8px; padding: 0 18px 18px;
+  }
+  .column-head {
+    position: sticky; top: 0; z-index: 1; background: #fff; padding: 14px 0 10px;
+    display: flex; gap: 10px; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #e5e7eb; margin-bottom: 8px;
+  }
+  h2 { margin: 0; font-size: 1.05rem; }
+  fieldset { border: 0; padding: 0; margin: 0 0 16px; }
+  .section-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin: 12px 0 6px; }
+  h3 { margin: 0; font-size: 1rem; }
+  .section-head button { font-size: .8rem; padding: 3px 9px; white-space: nowrap; }
+  label { display: flex; gap: 10px; align-items: flex-start; padding: 5px 6px; border-radius: 4px; cursor: pointer; }
+  label:hover { background: #eef2ff; }
+  label input { margin: 3px 0 0; width: 16px; height: 16px; flex: none; }
+  #output { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+  @media (max-width: 800px) {
+    body { height: auto; }
+    main { grid-template-columns: 1fr; }
+    .column { overflow: visible; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>FY1-2 Oman kokeellisen työn arviointi</h1>
+  <div class="score" id="score" aria-live="polite"></div>
+  <button type="button" id="reset">Aloita alusta</button>
+</header>
+
+<main>
+  <section class="column">
+    <div class="column-head"><h2>Arviointikriteerit</h2></div>
+    <form id="checklist"></form>
+  </section>
+  <section class="column">
+    <div class="column-head">
+      <h2>Palaute opiskelijalle</h2>
+      <button type="button" class="primary" id="copy">Kopioi teksti</button>
+    </div>
+    <div id="output"></div>
+  </section>
+</main>
+
+<script>
+const MAX_POINTS = 20;
+
+// Jokainen kohta: [myönteinen muoto, kehitettävä kohde (negaatio)]
+const SECTIONS = [
+  { title: "1. Otsikko, tutkimuskysymys ja hypoteesi", items: [
+    ["Opiskelijan nimi on kirjoitettu työselostukseen.", "Opiskelijan nimeä ei ole kirjoitettu työselostukseen."],
+    ["Otsikko on kuvaava ja kertoo työn aiheesta.", "Otsikko ei ole kuvaava eikä kerro työn aiheesta."],
+    ["Otsikko ei ole kirjoitettu kysymyksen muodossa.", "Otsikko on kirjoitettu kysymyksen muodossa."],
+    ["Tutkimuskysymys on annettu kysymyksen muodossa.", "Tutkimuskysymystä ei ole annettu kysymyksen muodossa."],
+    ["Tutkimuskysymyksestä käy ilmi riippumaton muuttuja.","Tutkimuskysymyksestä ei käy ilmi riippumaton muuttuja."],
+    ["Tutkimuskysymyksestä käy ilmi riippuva muuttuja.", "Tutkimuskysymyksestä ei käy ilmi riippuva muuttuja."],
+    ["Tutkimuskysymys kuvaa tutkittavaa riippuvuutta selkeästi.", "Tutkimuskysymys ei kuvaa tutkittavaa riippuvuutta selkeästi."],
+    ["Hypoteesi on esitetty ennusteena.", "Hypoteesia ei ole esitetty ennusteena."],
+    ["Hypoteesi vastaa tutkimuskysymykseen.", "Hypoteesi ei vastaa tutkimuskysymykseen."]
+  ]},
+  { title: "2. Välineet ja materiaalit", items: [
+    ["Työssä käytetyt välineet ja materiaalit on lueteltu.", "Työssä käytettyjä välineitä ja materiaaleja ei ole lueteltu."],
+    ["Kaikki mittauksissa käytetyt laitteet on mainittu.", "Kaikkia mittauksissa käytettyjä laitteita ei ole mainittu."],
+    ["Välineet on nimetty riittävän tarkasti.", "Välineitä ei ole nimetty riittävän tarkasti."],
+    ["Käytetty mittausohjelmisto tai sovellus on mainittu.", "Käytettyä mittausohjelmistoa tai sovellusta ei ole mainittu."]
+  ]},
+  { title: "3. Muuttujat", items: [
+    ["Työn muuttujat on esitetty taulukossa.", "Työn muuttujia ei ole esitetty taulukossa."],
+    ["Riippumaton muuttuja on määritetty oikein.", "Riippumatonta muuttujaa ei ole määritetty oikein."],
+    ["Riippuva muuttuja on määritetty oikein.", "Riippuvaa muuttujaa ei ole määritetty oikein."],
+    ["Vakioidut muuttujat on määritetty.", "Vakioituja muuttujia ei ole määritetty."],
+    ["Vakioidut muuttujat ovat työn kannalta perusteltuja.", "Vakioidut muuttujat eivät ole työn kannalta perusteltuja."],
+    ["Kaikki työn kannalta oleelliset vakioidut muuttujat on nimetty.", "Kaikkia työn kannalta oleellisia vakioituja muuttujia ei ole nimetty."],
+    ["Riippumattoman muuttujan käsite on ymmärretty oikein.", "Riippumattoman muuttujan käsitettä ei ole ymmärretty oikein."],
+    ["Riippuvan muuttujan käsite on ymmärretty oikein.", "Riippuvan muuttujan käsitettä ei ole ymmärretty oikein."],
+    ["Vakioitujen muuttujien merkitys on huomioitu.", "Vakioitujen muuttujien merkitystä ei ole huomioitu."]
+  ]},
+  { title: "4. Mittauksen vaiheet", items: [
+    ["Mittauksen vaiheet on kuvattu vaiheittain.", "Mittauksen vaiheita ei ole kuvattu vaiheittain."],
+    ["Työvaiheet on kuvattu riittävän tarkasti.", "Työvaiheita ei ole kuvattu riittävän tarkasti."],
+    ["Työ olisi mahdollista toistaa annettujen ohjeiden perusteella.", "Työtä ei olisi mahdollista toistaa annettujen ohjeiden perusteella."],
+    ["Mittaustapa on kuvattu selkeästi.", "Mittaustapaa ei ole kuvattu selkeästi."],
+    ["Riippumattoman muuttujan arvot on ilmoitettu.", "Riippumattoman muuttujan arvoja ei ole ilmoitettu."],
+    ["Mittauksia on tehty vähintään viidellä eri arvolla.", "Mittauksia ei ole tehty vähintään viidellä eri arvolla."],
+    ["Vakioidut muuttujat on pidetty samoina koko mittauksen ajan.", "Vakioituja muuttujia ei ole pidetty samoina koko mittauksen ajan."],
+    ["Mittausvälineiden käyttö on kuvattu.", "Mittausvälineiden käyttöä ei ole kuvattu."]
+  ]},
+  { title: "5. Mittaustulokset taulukoituna", items: [
+    ["Mittaustulokset on esitetty taulukossa.", "Mittaustuloksia ei ole esitetty taulukossa."],
+    ["Taulukolle on annettu otsikko tai numero.", "Taulukolle ei ole annettu otsikkoa tai numeroa."],
+    ["Taulukon seliteteksti on annettu.", "Taulukon selitetekstiä ei ole annettu."],
+    ["Sarakkeet on nimetty oikein.","Sarakkeita ei ole nimetty oikein."],
+    ["Suureiden nimet on merkitty sarakeotsikoihin.", "Suureiden nimiä ei ole merkitty sarakeotsikoihin."],
+    ["Mittayksiköt on merkitty sarakeotsikoihin.", "Mittayksiköitä ei ole merkitty sarakeotsikoihin."],
+    ["Taulukon arvot on esitetty ilman yksikköjä.", "Taulukon arvoja ei ole esitetty ilman yksikköjä."],
+    ["Mittaustulokset on esitetty samalla tarkkuudella.", "Mittaustuloksia ei ole esitetty samalla tarkkuudella."],
+    ["Mittaustuloksia on vähintään viideltä mittauspisteeltä.", "Mittaustuloksia ei ole vähintään viideltä mittauspisteeltä."],
+    ["Tulokset on esitetty johdonmukaisessa järjestyksessä.", "Tuloksia ei ole esitetty johdonmukaisessa järjestyksessä."],
+    ["Mittaustulokset vastaavat tutkimuskysymystä.", "Mittaustulokset eivät vastaa tutkimuskysymystä."]
+  ]},
+  { title: "6. Kuvaaja", items: [
+    ["Mittaustuloksista on piirretty kuvaaja.", "Mittaustuloksista ei ole piirretty kuvaajaa."],
+    ["Kuvaajan seliteteksti on annettu.", "Kuvaajan selitetekstiä ei ole annettu."],
+    ["Riippumaton muuttuja on sijoitettu vaaka-akselille.","Riippumatonta muuttujaa ei ole sijoitettu vaaka-akselille."],
+    ["Riippuva muuttuja on sijoitettu pystyakselille.", "Riippuvaa muuttujaa ei ole sijoitettu pystyakselille."],
+    ["Akselit on nimetty.", "Akseleita ei ole nimetty."],
+    ["Mittayksiköt on merkitty akseleihin.", "Mittayksiköitä ei ole merkitty akseleihin."],
+    ["Mittauspisteet näkyvät kuvaajassa.", "Mittauspisteet eivät näy kuvaajassa."],
+    ["Kuvaajan asteikot ovat tarkoituksenmukaiset.", "Kuvaajan asteikot eivät ole tarkoituksenmukaiset."],
+    ["Kuvaaja vastaa taulukon mittaustuloksia.", "Kuvaaja ei vastaa taulukon mittaustuloksia."],
+    ["Sovitekäyrä on lisätty tarpeen mukaan.", "Sovitekäyrää ei ole lisätty tarpeen mukaan."],
+    ["Sovitteen valinta on perusteltu.", "Sovitteen valintaa ei ole perusteltu."],
+    ["Kuvaajan fonttikoko on riittävän iso, jotta tekstit ovat helposti luettavissa.", "Kuvaajan fonttikoko ei ole riittävän iso, jotta tekstit olisivat helposti luettavissa."]
+  ]},
+  { title: "7. Johtopäätökset", items: [
+    ["Johtopäätökset vastaavat tutkimuskysymykseen.", "Johtopäätökset eivät vastaa tutkimuskysymykseen."],
+    ["Tuloksia verrataan hypoteesiin.", "Tuloksia ei verrata hypoteesiin."],
+    ["Johtopäätökset perustuvat mittaustuloksiin.", "Johtopäätökset eivät perustu mittaustuloksiin."],
+    ["Johtopäätöksissä hyödynnetään kuvaajaa.", "Johtopäätöksissä ei hyödynnetä kuvaajaa."],
+    ["Tulosten perusteella arvioidaan suureiden välistä riippuvuutta.", "Tulosten perusteella ei arvioida suureiden välistä riippuvuutta."],
+    ["Mahdollista verrannollisuutta pohditaan.", "Mahdollista verrannollisuutta ei pohdita."],
+    ["Johtopäätökset ovat mittaustulosten kanssa yhdenmukaisia.", "Johtopäätökset eivät ole mittaustulosten kanssa yhdenmukaisia."],
+    ["Johtopäätöksissä ei tehdä tulosten ulkopuolisia päätelmiä.", "Johtopäätöksissä tehdään tulosten ulkopuolisia päätelmiä."],
+    ["Johtopäätökset on kirjoitettu selkeinä kokonaisina virkkeinä.", "Johtopäätöksiä ei ole kirjoitettu selkeinä kokonaisina virkkeinä."]
+  ]}
+];
+
+const form = document.getElementById("checklist");
+const output = document.getElementById("output");
+const scoreEl = document.getElementById("score");
+const copyButton = document.getElementById("copy");
+
+function element(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+// Rakennetaan vasemman palstan checkbox-lista
+const sectionBoxes = SECTIONS.map(section => {
+  const toggle = element("button", { type: "button" });
+  const fieldset = element("fieldset", {},
+    element("div", { className: "section-head" }, element("h3", { textContent: section.title }), toggle));
+
+  const boxes = section.items.map(([text]) => {
+    const box = element("input", { type: "checkbox", autocomplete: "off" });
+    fieldset.append(element("label", {}, box, element("span", { textContent: text })));
+    return box;
+  });
+
+  toggle.addEventListener("click", () => {
+    const check = !boxes.every(b => b.checked);
+    boxes.forEach(b => b.checked = check);
+    update();
+  });
+
+  form.append(fieldset);
+  return { boxes, toggle };
+});
+
+function update() {
+  let selected = 0;
+  let total = 0;
+  const parts = [];
+
+  SECTIONS.forEach((section, s) => {
+    const { boxes, toggle } = sectionBoxes[s];
+    const good = section.items.filter((_, i) => boxes[i].checked).map(item => "+ " + item[0]);
+    const improve = section.items.filter((_, i) => !boxes[i].checked).map(item => "− " + item[1]);
+
+    selected += good.length;
+    total += section.items.length;
+    toggle.textContent = improve.length ? "Valitse kaikki" : "Poista valinnat";
+
+    const lines = [section.title.toUpperCase()];
+    if (good.length) lines.push("Onnistumiset:", ...good);
+    if (good.length && improve.length) lines.push("");
+    if (improve.length) lines.push("Kehitettävää:", ...improve);
+    parts.push(lines.join("\n"));
+  });
+
+  // Kokonaislukulaskenta ennen jakoa, pyöristys alaspäin
+  const points = Math.floor(selected * MAX_POINTS / total);
+  const scoreText = `Pisteet: ${points} / ${MAX_POINTS}`;
+
+  scoreEl.textContent = `${scoreText} (valittu ${selected} / ${total} kohtaa)`;
+  output.textContent = `${scoreText}\n\n${parts.join("\n\n")}`;
+}
+
+// Varakeino selaimille, joissa leikepöytärajapinta ei ole käytettävissä
+function copyFallback(text) {
+  const area = element("textarea", { value: text });
+  document.body.append(area);
+  area.select();
+  const ok = document.execCommand("copy");
+  area.remove();
+  return ok;
+}
+
+let copyTimer;
+copyButton.addEventListener("click", async () => {
+  const text = output.textContent;
+  let ok;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    ok = copyFallback(text);
+  }
+  copyButton.textContent = ok ? "Kopioitu" : "Kopiointi ei onnistunut";
+  clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => copyButton.textContent = "Kopioi teksti", 2000);
+});
+
+form.addEventListener("change", update);
+
+document.getElementById("reset").addEventListener("click", () => {
+  const anyChecked = sectionBoxes.some(s => s.boxes.some(b => b.checked));
+  if (anyChecked && !confirm("Tyhjennetäänkö kaikki valinnat?")) return;
+  form.reset();
+  update();
+  document.querySelectorAll(".column").forEach(c => c.scrollTop = 0);
+  window.scrollTo(0, 0);
+});
+
+update();
+</script>
+</body>
+</html>
