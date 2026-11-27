@@ -275,8 +275,8 @@ function update() {
     parts.push(lines.join("\n"));
   });
 
-  // Multiply before dividing, then round down
-  const points = total ? Math.floor(selected * MAX_POINTS / total) : 0;
+  // Multiply before dividing, then round to the nearest integer (.5 rounds up)
+  const points = total ? Math.round(selected * MAX_POINTS / total) : 0;
   const scoreText = `Points: ${points} / ${MAX_POINTS}`;
 
   const excludedText = excluded ? `, ${excluded} not scored` : "";
